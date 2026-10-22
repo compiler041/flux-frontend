@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flux: see your traffic before your users complain</title>
+<meta name="description" content="Flux is a lightweight, self-hostable observability dashboard for small teams. Live request charts, thresholds and alerts, with one line of Express middleware.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%232A3CFF'/><path d='M12 62 L34 62 L46 26 L60 74 L72 44 L88 44' fill='none' stroke='%23fff' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cobalt:#2A3CFF; --cobalt-deep:#1727C9; --ink:#0E1330; --ice:#EEF1FF; --line:#D5DBFF;
+  --signal:#FFD23F; --white:#fff; --muted:#4A5280;
+  --display:"Bricolage Grotesque","Arial Black",Arial,sans-serif;
+  --body:"Instrument Sans",Calibri,Arial,sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--body);background:var(--ice);color:var(--ink);line-height:1.6;font-size:17px;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--signal);outline-offset:3px}
+.wrap{max-width:1120px;margin:0 auto;padding:0 28px}
+h1,h2,h3{font-family:var(--display);line-height:1.02;letter-spacing:-.02em}
+
+/* hero */
+.hero{background:var(--cobalt);color:var(--white);padding:28px 0 0;overflow:hidden}
+nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:76px}
+.logo{display:flex;align-items:center;gap:10px;font-family:var(--display);font-weight:800;font-size:26px;text-decoration:none}
+.logo svg{width:32px;height:32px}
+.nav-note{font-size:15px;opacity:.85;display:flex;align-items:center;gap:9px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--signal);animation:pulse 2s infinite}
+@keyframes pulse{50%{opacity:.25}}
+h1{font-weight:800;font-size:clamp(46px,8.2vw,104px);max-width:11ch}
+.lede{margin-top:26px;max-width:520px;font-size:20px;opacity:.92}
+.hero-grid{display:grid;grid-template-columns:1fr;gap:0}
+
+/* live board */
+.board{margin-top:56px;background:var(--ink);border-radius:22px 22px 0 0;padding:26px 28px 0;position:relative}
+.board-head{display:flex;flex-wrap:wrap;gap:18px 40px;align-items:flex-end;justify-content:space-between}
+.board-title{font-size:15px;color:#AEB6F0}
+.board-title b{display:block;color:var(--white);font-family:var(--display);font-size:22px;font-weight:600}
+.stats{display:flex;gap:34px}
+.stat span{display:block;font-size:14px;color:#AEB6F0}
+.stat b{font-family:var(--display);font-size:34px;font-weight:600;color:var(--white);font-variant-numeric:tabular-nums}
+.chart{margin-top:18px;position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.thr-label{position:absolute;right:0;font-size:13px;font-weight:600;color:var(--ink);background:var(--signal);padding:2px 9px;border-radius:999px;transform:translateY(-50%)}
+.alerts{display:flex;flex-wrap:wrap;gap:10px;padding:16px 0 22px;min-height:70px;align-items:center;border-top:1px solid #262D5C}
+.alerts em{font-style:normal;font-size:14px;color:#AEB6F0;margin-right:6px}
+.chip{font-size:14px;background:#2A1F0A;color:var(--signal);border:1px solid #5C4A12;border-radius:999px;padding:4px 14px;animation:pop .35s ease-out}
+@keyframes pop{from{transform:scale(.85);opacity:0}}
+
+/* sections */
+section{padding:112px 0}
+h2{font-weight:800;font-size:clamp(34px,5vw,58px);max-width:15ch}
+.sub{margin-top:18px;max-width:560px;color:var(--muted);font-size:19px}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:start}
+.problem p{font-size:21px;margin-bottom:22px}
+.problem p:last-child{margin:0}
+.problem s{text-decoration-color:var(--cobalt);text-decoration-thickness:3px}
+
+.steps{margin-top:56px;display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:2px solid var(--ink);border-radius:20px;background:var(--white)}
+.step{padding:28px 24px 30px;border-right:2px solid var(--ink)}
+.step:last-child{border:0}
+.step i{font-style:normal;font-family:var(--display);font-weight:800;font-size:15px;background:var(--cobalt);color:var(--white);border-radius:999px;display:inline-grid;place-items:center;width:30px;height:30px;margin-bottom:16px}
+.step h3{font-size:23px;margin-bottom:8px;font-weight:600}
+.step p{font-size:16px;color:var(--muted)}
+.worker{margin-top:16px;display:inline-flex;gap:12px;align-items:center;font-size:16px;color:var(--muted)}
+.worker b{color:var(--ink)}
+
+.feat{display:grid;grid-template-columns:7fr 5fr;gap:24px;margin-top:56px}
+.big{background:var(--cobalt);color:var(--white);border-radius:24px;padding:40px;display:flex;flex-direction:column;justify-content:space-between;min-height:340px}
+.big h3{font-size:clamp(28px,3.4vw,42px);font-weight:600;max-width:14ch}
+.big p{max-width:34ch;opacity:.9}
+.code{margin-top:28px;background:var(--ink);color:#CFD5FF;border-radius:14px;padding:18px 20px;font:15px/1.6 ui-monospace,Menlo,Consolas,monospace;overflow-x:auto;white-space:pre}
+.code .k{color:var(--signal)}
+.list{display:flex;flex-direction:column;gap:0;border-top:2px solid var(--ink)}
+.list div{padding:22px 0;border-bottom:2px solid var(--ink)}
+.list h3{font-size:22px;font-weight:600;margin-bottom:4px}
+.list p{font-size:16px;color:var(--muted)}
+
+.stack{background:var(--ink);color:var(--white);padding:60px 0}
+.stack .wrap{display:flex;flex-wrap:wrap;gap:20px 56px;align-items:center;justify-content:space-between}
+.stack h2{font-size:clamp(26px,3vw,36px);max-width:none}
+.stack ul{display:flex;flex-wrap:wrap;gap:12px;list-style:none;padding:0}
+.stack li{border:1.5px solid #4553C9;border-radius:999px;padding:7px 18px;font-size:16px}
+
+/* cta */
+.cta{background:var(--cobalt);color:var(--white);text-align:center;padding:128px 0 120px}
+.cta h2{margin:0 auto;max-width:13ch;font-size:clamp(42px,7vw,88px)}
+.cta p{margin:22px auto 0;max-width:480px;font-size:19px;opacity:.9}
+.btn{display:inline-flex;align-items:center;gap:14px;margin-top:44px;background:var(--signal);color:var(--ink);font-family:var(--display);font-weight:800;font-size:24px;padding:22px 38px;border-radius:999px;text-decoration:none;box-shadow:0 7px 0 var(--ink);transition:transform .15s,box-shadow .15s}
+.btn svg{width:26px;height:26px;transition:transform .2s}
+.btn:hover{transform:translateY(3px);box-shadow:0 4px 0 var(--ink)}
+.btn:hover svg{transform:translate(4px,-4px)}
+.btn:active{transform:translateY(7px);box-shadow:0 0 0 var(--ink)}
+.small{margin-top:30px;font-size:15px;opacity:.8}
+
+footer{background:var(--cobalt-deep);color:#C9D0FF;padding:26px 0;font-size:15px}
+footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px}
+
+@media(max-width:860px){
+  .split,.feat{grid-template-columns:1fr;gap:32px}
+  .steps{grid-template-columns:1fr 1fr}
+  .step:nth-child(2){border-right:0}
+  .step:nth-child(-n+2){border-bottom:2px solid var(--ink)}
+  section{padding:80px 0}
+  nav{margin-bottom:48px}
+  .nav-note{display:none}
+}
+@media(max-width:520px){
+  .steps{grid-template-columns:1fr}
+  .step{border-right:0;border-bottom:2px solid var(--ink)}
+  .step:last-child{border-bottom:0}
+  .board{padding:20px 18px 0}
+  .stats{gap:22px}
+  .btn{font-size:20px;padding:18px 28px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <nav>
+      <a class="logo" href="#top" aria-label="Flux home">
+        <svg viewBox="0 0 100 100" aria-hidden="true"><rect width="100" height="100" rx="22" fill="#fff"/><path d="M12 62 L34 62 L46 26 L60 74 L72 44 L88 44" fill="none" stroke="#2A3CFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Flux
+      </a>
+      <span class="nav-note"><span class="dot"></span>Live and watching Second Brain</span>
+    </nav>
+
+    <h1 id="top">See the spike before users do.</h1>
+    <p class="lede">Flux is a small, self-hostable dashboard that shows how your live web traffic behaves and flags it when it crosses your limit.</p>
+
+    <div class="board" role="img" aria-label="Animated demo of a live request chart with a threshold line">
+      <div class="board-head">
+        <div class="board-title">Requests per 4 seconds<b>second-brain</b></div>
+        <div class="stats">
+          <div class="stat"><span>Current</span><b id="s-cur">0</b></div>
+          <div class="stat"><span>Average</span><b id="s-avg">0</b></div>
+          <div class="stat"><span>Peak</span><b id="s-peak">0</b></div>
+        </div>
+      </div>
+      <div class="chart">
+        <svg viewBox="0 0 1000 300" preserveAspectRatio="none" aria-hidden="true">
+          <defs><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7C8AFF" stop-opacity=".5"/><stop offset="1" stop-color="#7C8AFF" stop-opacity="0"/></linearGradient></defs>
+          <g stroke="#1E2552" stroke-width="1"><line x1="0" y1="75" x2="1000" y2="75"/><line x1="0" y1="150" x2="1000" y2="150"/><line x1="0" y1="225" x2="1000" y2="225"/></g>
+          <path id="area" fill="url(#fade)"/>
+          <line id="thr" x1="0" x2="1000" stroke="#FFD23F" stroke-width="2" stroke-dasharray="9 7"/>
+          <path id="line" fill="none" stroke="#fff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <span class="thr-label" id="thr-label">threshold 28</span>
+      </div>
+      <div class="alerts" id="alerts" aria-live="polite"><em>Recent alerts</em><span id="none" style="font-size:14px;color:#6F79C2">None yet. Waiting for a spike.</span></div>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap split">
+    <h2>Big monitoring stacks are overkill for small teams.</h2>
+    <div class="problem">
+      <p>Campus projects, small teams and MSMEs run live apps with <s>no view of their traffic</s>. Outages and surges usually surface when someone complains.</p>
+      <p>Grafana with Prometheus is powerful, but it is heavy to host and tune. Flux does the few things a small team needs and nothing else.</p>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <h2>From request to alert in four steps.</h2>
+    <div class="steps">
+      <div class="step"><i>1</i><h3>flux-agent</h3><p>Express middleware inside your app counts every request.</p></div>
+      <div class="step"><i>2</i><h3>Ingestion API</h3><p>Receives counts over per-site API keys.</p></div>
+      <div class="step"><i>3</i><h3>MongoDB Atlas</h3><p>Stores metrics, sites and alerts.</p></div>
+      <div class="step"><i>4</i><h3>React dashboard</h3><p>Charts traffic live with Vite and Recharts.</p></div>
+    </div>
+    <p class="worker"><span class="dot" style="background:var(--cobalt)"></span><span><b>Alert worker:</b> checks traffic against each site's threshold on a schedule and waits 5 minutes before alerting again.</span></p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <h2>Everything on one screen.</h2>
+    <div class="feat">
+      <div class="big">
+        <div>
+          <h3>Start reporting with one line.</h3>
+          <div class="code"><span class="k">app</span>.use(fluxAgent({ apiKey: process.env.FLUX_KEY }));</div>
+        </div>
+        <p>Add the agent to your Express app and your traffic shows up in Flux.</p>
+      </div>
+      <div class="list">
+        <div><h3>Live request chart</h3><p>Traffic with your threshold drawn right on it.</p></div>
+        <div><h3>Current, average and peak</h3><p>Stat cards that answer "is this normal?" at a glance.</p></div>
+        <div><h3>Recent alerts</h3><p>Every breach logged, one alert per spike.</p></div>
+        <div><h3>Per-site keys and thresholds</h3><p>Each site gets its own key and its own limit.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="stack">
+  <div class="wrap">
+    <h2>Runs on tools you already know.</h2>
+    <ul><li>MERN stack</li><li>Docker</li><li>AWS EC2</li><li>Nginx + HTTPS</li><li>MongoDB Atlas</li></ul>
+  </div>
+</div>
+
+<section class="cta">
+  <div class="wrap">
+    <h2>Your traffic is live right now.</h2>
+    <p>Open the Flux dashboard and watch it.</p>
+    <a class="btn" href="https://flux.secondbrain.sbs" target="_blank" rel="noopener noreferrer">Access Flux
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg>
+    </a>
+    <p class="small">Opens in a new tab. The dashboard asks you to sign in.</p>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Flux, by Vaibhav Rathod and Abhinav Pandey</span>
+    <span>SDG-9 · Web Programming Lab · K.J. Somaiya School of Engineering</span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var N=60, W=1000, H=300, MAX=40, THR=28;
+  var data=[], spike=0, hadAlert=false;
+  var $=function(i){return document.getElementById(i)};
+  var line=$('line'), area=$('area'), thr=$('thr'), label=$('thr-label');
+  var y=function(v){return H-(v/MAX)*H};
+  thr.setAttribute('y1',y(THR)); thr.setAttribute('y2',y(THR));
+  label.style.top=(y(THR)/H*100)+'%';
+  function next(i){
+    if(spike>0){spike--; return 30+Math.random()*6}
+    if(i>20 && Math.random()<.035){spike=3+Math.floor(Math.random()*3); return 30}
+    return 13+Math.sin(i/6)*3+Math.random()*7;
+  }
+  for(var i=0;i<N;i++) data.push(next(i%20));
+  var tick=0;
+  function draw(){
+    var d='';
+    data.forEach(function(v,i){d+=(i?'L':'M')+(i/(N-1)*W).toFixed(1)+' '+y(v).toFixed(1)});
+    line.setAttribute('d',d);
+    area.setAttribute('d',d+'L'+W+' '+H+'L0 '+H+'Z');
+    var cur=data[N-1], sum=0, pk=0;
+    data.forEach(function(v){sum+=v; if(v>pk)pk=v});
+    $('s-cur').textContent=Math.round(cur);
+    $('s-avg').textContent=Math.round(sum/N);
+    $('s-peak').textContent=Math.round(pk);
+  }
+  function alertOnce(){
+    var none=$('none'); if(none) none.remove();
+    var c=document.createElement('span'); c.className='chip';
+    c.textContent='Threshold breached at '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var box=$('alerts'); box.insertBefore(c,box.children[1]);
+    while(box.children.length>4) box.removeChild(box.lastChild);
+  }
+  function step(){
+    tick++;
+    var v=next(tick); data.shift(); data.push(v);
+    if(v>THR && !hadAlert){hadAlert=true; alertOnce()}
+    if(v<=THR) hadAlert=false;
+    draw();
+  }
+  draw();
+  if(!window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    setInterval(step,650);
+  }
+})();
+</script>
+</body>
+</html>
